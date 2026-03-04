@@ -83,6 +83,10 @@ if [ "$CLOUD_MODE" = true ]; then
     echo "  Public Key: $LANGFUSE_PUBLIC_KEY"
     echo ""
 
+    export LANGFUSE_PUBLIC_KEY
+    export LANGFUSE_SECRET_KEY
+    export LANGFUSE_HOST
+
 else
     # --- Self-hosted mode: read from .env ---
     # Check if .env exists
@@ -102,6 +106,10 @@ else
     LANGFUSE_PUBLIC_KEY=$(get_env_value "LANGFUSE_INIT_PROJECT_PUBLIC_KEY")
     LANGFUSE_SECRET_KEY=$(get_env_value "LANGFUSE_INIT_PROJECT_SECRET_KEY")
     LANGFUSE_HOST="http://localhost:3050"
+
+    export LANGFUSE_PUBLIC_KEY
+    export LANGFUSE_SECRET_KEY
+    export LANGFUSE_HOST
 
     if [ -z "$LANGFUSE_PUBLIC_KEY" ] || [ -z "$LANGFUSE_SECRET_KEY" ]; then
         echo -e "${RED}Error: Could not read API keys from .env${NC}"
@@ -189,8 +197,10 @@ fi
 SETTINGS_CONTENT=$(cat "$SETTINGS_FILE")
 
 # Use Python to update JSON (more reliable than jq)
-$PYTHON << EOF
+# Use os.environ to read credentials to prevent shell injection
+"$PYTHON" << EOF
 import json
+import os
 import sys
 
 # Read current settings
@@ -205,9 +215,9 @@ if "hooks" not in settings:
 
 # Add environment variables
 settings["env"]["TRACE_TO_LANGFUSE"] = "true"
-settings["env"]["LANGFUSE_PUBLIC_KEY"] = "$LANGFUSE_PUBLIC_KEY"
-settings["env"]["LANGFUSE_SECRET_KEY"] = "$LANGFUSE_SECRET_KEY"
-settings["env"]["LANGFUSE_HOST"] = "$LANGFUSE_HOST"
+settings["env"]["LANGFUSE_PUBLIC_KEY"] = os.environ.get("LANGFUSE_PUBLIC_KEY", "")
+settings["env"]["LANGFUSE_SECRET_KEY"] = os.environ.get("LANGFUSE_SECRET_KEY", "")
+settings["env"]["LANGFUSE_HOST"] = os.environ.get("LANGFUSE_HOST", "")
 
 # Add Stop hook if not already present
 if "Stop" not in settings["hooks"]:
