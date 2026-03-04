@@ -21,7 +21,10 @@ import socket
 try:
     from langfuse import Langfuse
 except ImportError:
-    print("Error: langfuse package not installed. Run: pip install langfuse", file=sys.stderr)
+    print(
+        "Error: langfuse package not installed. Run: pip install langfuse",
+        file=sys.stderr,
+    )
     sys.exit(0)
 
 # Configuration
@@ -38,6 +41,7 @@ def log(level: str, message: str) -> None:
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     with open(LOG_FILE, "a") as f:
         f.write(f"{timestamp} [{level}] {message}\n")
+    os.chmod(LOG_FILE, 0o600)  # Restrict to owner only
 
 
 def debug(message: str) -> None:
@@ -76,7 +80,9 @@ def check_langfuse_health(host: str) -> bool:
         sock.close()
 
         is_healthy = result == 0
-        debug(f"Health check for {hostname}:{port} - {'OK' if is_healthy else 'FAILED'}")
+        debug(
+            f"Health check for {hostname}:{port} - {'OK' if is_healthy else 'FAILED'}"
+        )
         return is_healthy
     except Exception as e:
         debug(f"Health check error: {e}")
@@ -89,7 +95,11 @@ def queue_trace(trace_data: dict) -> None:
     trace_data["queued_at"] = datetime.now(timezone.utc).isoformat()
     with open(QUEUE_FILE, "a") as f:
         f.write(json.dumps(trace_data) + "\n")
-    log("INFO", f"Queued trace for session {trace_data.get('session_id', 'unknown')}, turn {trace_data.get('turn_num', '?')}")
+    os.chmod(QUEUE_FILE, 0o600)  # Restrict to owner only
+    log(
+        "INFO",
+        f"Queued trace for session {trace_data.get('session_id', 'unknown')}, turn {trace_data.get('turn_num', '?')}",
+    )
 
 
 def load_queued_traces() -> list[dict]:
@@ -167,6 +177,7 @@ def save_state(state: dict) -> None:
     """Save the state file."""
     STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
     STATE_FILE.write_text(json.dumps(state, indent=2))
+    os.chmod(STATE_FILE, 0o600)  # Restrict to owner only
 
 
 def get_content(msg: dict) -> Any:
@@ -194,7 +205,8 @@ def get_tool_calls(msg: dict) -> list:
     content = get_content(msg)
     if isinstance(content, list):
         return [
-            item for item in content
+            item
+            for item in content
             if isinstance(item, dict) and item.get("type") == "tool_use"
         ]
     return []
@@ -297,7 +309,9 @@ def find_latest_transcript() -> tuple[str, Path, str] | None:
             first_msg = json.loads(first_line)
             session_id = first_msg.get("sessionId", latest_file.stem)
             project_name = extract_project_name(latest_project_dir)
-            debug(f"Found transcript: {latest_file}, session: {session_id}, project: {project_name}")
+            debug(
+                f"Found transcript: {latest_file}, session: {session_id}, project: {project_name}"
+            )
             return (session_id, latest_file, project_name)
         except (json.JSONDecodeError, IOError, IndexError) as e:
             debug(f"Error reading transcript {latest_file}: {e}")
@@ -307,7 +321,9 @@ def find_latest_transcript() -> tuple[str, Path, str] | None:
     return None
 
 
-def find_modified_transcripts(state: dict, max_sessions: int = 10) -> list[tuple[str, Path, str]]:
+def find_modified_transcripts(
+    state: dict, max_sessions: int = 10
+) -> list[tuple[str, Path, str]]:
     """Find all transcripts that have been modified since their last state update.
 
     Returns up to max_sessions transcripts, sorted by modification time (most recent first).
@@ -351,13 +367,17 @@ def find_modified_transcripts(state: dict, max_sessions: int = 10) -> list[tuple
 
                 # If file modified after last state update, it needs processing
                 if mtime > last_update_timestamp:
-                    modified_transcripts.append({
-                        "session_id": session_id,
-                        "transcript_file": transcript_file,
-                        "project_name": project_name,
-                        "mtime": mtime,
-                    })
-                    debug(f"Found modified session: {session_id} (project: {project_name})")
+                    modified_transcripts.append(
+                        {
+                            "session_id": session_id,
+                            "transcript_file": transcript_file,
+                            "project_name": project_name,
+                            "mtime": mtime,
+                        }
+                    )
+                    debug(
+                        f"Found modified session: {session_id} (project: {project_name})"
+                    )
             except (json.JSONDecodeError, IOError, IndexError) as e:
                 debug(f"Error reading transcript {transcript_file}: {e}")
                 continue
@@ -369,7 +389,9 @@ def find_modified_transcripts(state: dict, max_sessions: int = 10) -> list[tuple
         for t in modified_transcripts[:max_sessions]
     ]
 
-    debug(f"Found {len(result)} modified transcripts (out of {len(modified_transcripts)} total)")
+    debug(
+        f"Found {len(result)} modified transcripts (out of {len(modified_transcripts)} total)"
+    )
     return result
 
 
@@ -405,14 +427,16 @@ def queue_turns_from_messages(
             if current_user and current_assistants:
                 turns += 1
                 turn_num = turn_count + turns
-                queue_trace({
-                    "session_id": session_id,
-                    "turn_num": turn_num,
-                    "user_msg": current_user,
-                    "assistant_msgs": current_assistants,
-                    "tool_results": current_tool_results,
-                    "project_name": project_name,
-                })
+                queue_trace(
+                    {
+                        "session_id": session_id,
+                        "turn_num": turn_num,
+                        "user_msg": current_user,
+                        "assistant_msgs": current_assistants,
+                        "tool_results": current_tool_results,
+                        "project_name": project_name,
+                    }
+                )
 
             current_user = msg
             current_assistants = []
@@ -444,14 +468,16 @@ def queue_turns_from_messages(
     if current_user and current_assistants:
         turns += 1
         turn_num = turn_count + turns
-        queue_trace({
-            "session_id": session_id,
-            "turn_num": turn_num,
-            "user_msg": current_user,
-            "assistant_msgs": current_assistants,
-            "tool_results": current_tool_results,
-            "project_name": project_name,
-        })
+        queue_trace(
+            {
+                "session_id": session_id,
+                "turn_num": turn_num,
+                "user_msg": current_user,
+                "assistant_msgs": current_assistants,
+                "tool_results": current_tool_results,
+                "project_name": project_name,
+            }
+        )
 
     return turns
 
@@ -476,7 +502,11 @@ def create_trace(
 
     # Get model info from first assistant message
     model = "claude"
-    if assistant_msgs and isinstance(assistant_msgs[0], dict) and "message" in assistant_msgs[0]:
+    if (
+        assistant_msgs
+        and isinstance(assistant_msgs[0], dict)
+        and "message" in assistant_msgs[0]
+    ):
         model = assistant_msgs[0]["message"].get("model", "claude")
 
     # Collect all tool calls and results
@@ -494,16 +524,21 @@ def create_trace(
                 tr_content = get_content(tr)
                 if isinstance(tr_content, list):
                     for item in tr_content:
-                        if isinstance(item, dict) and item.get("tool_use_id") == tool_id:
+                        if (
+                            isinstance(item, dict)
+                            and item.get("tool_use_id") == tool_id
+                        ):
                             tool_output = item.get("content")
                             break
 
-            all_tool_calls.append({
-                "name": tool_name,
-                "input": tool_input,
-                "output": tool_output,
-                "id": tool_id,
-            })
+            all_tool_calls.append(
+                {
+                    "name": tool_name,
+                    "input": tool_input,
+                    "output": tool_output,
+                    "id": tool_id,
+                }
+            )
 
     # Build tags list
     tags = ["claude-code"]
@@ -564,7 +599,13 @@ def create_trace(
     debug(f"Created trace for turn {turn_num}")
 
 
-def process_transcript(langfuse: Langfuse, session_id: str, transcript_file: Path, state: dict, project_name: str = "") -> int:
+def process_transcript(
+    langfuse: Langfuse,
+    session_id: str,
+    transcript_file: Path,
+    state: dict,
+    project_name: str = "",
+) -> int:
     """Process a transcript file and create traces for new turns."""
     # Get previous state for this session
     session_state = state.get(session_id, {})
@@ -620,7 +661,15 @@ def process_transcript(langfuse: Langfuse, session_id: str, transcript_file: Pat
             if current_user and current_assistants:
                 turns += 1
                 turn_num = turn_count + turns
-                create_trace(langfuse, session_id, turn_num, current_user, current_assistants, current_tool_results, project_name)
+                create_trace(
+                    langfuse,
+                    session_id,
+                    turn_num,
+                    current_user,
+                    current_assistants,
+                    current_tool_results,
+                    project_name,
+                )
 
             # Start new turn
             current_user = msg
@@ -658,7 +707,15 @@ def process_transcript(langfuse: Langfuse, session_id: str, transcript_file: Pat
     if current_user and current_assistants:
         turns += 1
         turn_num = turn_count + turns
-        create_trace(langfuse, session_id, turn_num, current_user, current_assistants, current_tool_results, project_name)
+        create_trace(
+            langfuse,
+            session_id,
+            turn_num,
+            current_user,
+            current_assistants,
+            current_tool_results,
+            project_name,
+        )
 
     # Update state
     state[session_id] = {
@@ -681,12 +738,21 @@ def main():
         sys.exit(0)
 
     # Check for required environment variables
-    public_key = os.environ.get("CC_LANGFUSE_PUBLIC_KEY") or os.environ.get("LANGFUSE_PUBLIC_KEY")
-    secret_key = os.environ.get("CC_LANGFUSE_SECRET_KEY") or os.environ.get("LANGFUSE_SECRET_KEY")
-    host = os.environ.get("CC_LANGFUSE_HOST") or os.environ.get("LANGFUSE_HOST", "https://cloud.langfuse.com")
+    public_key = os.environ.get("CC_LANGFUSE_PUBLIC_KEY") or os.environ.get(
+        "LANGFUSE_PUBLIC_KEY"
+    )
+    secret_key = os.environ.get("CC_LANGFUSE_SECRET_KEY") or os.environ.get(
+        "LANGFUSE_SECRET_KEY"
+    )
+    host = os.environ.get("CC_LANGFUSE_HOST") or os.environ.get(
+        "LANGFUSE_HOST", "https://cloud.langfuse.com"
+    )
 
     if not public_key or not secret_key:
-        log("ERROR", "Langfuse API keys not set (CC_LANGFUSE_PUBLIC_KEY / CC_LANGFUSE_SECRET_KEY)")
+        log(
+            "ERROR",
+            "Langfuse API keys not set (CC_LANGFUSE_PUBLIC_KEY / CC_LANGFUSE_SECRET_KEY)",
+        )
         sys.exit(0)
 
     # Load state
@@ -750,7 +816,10 @@ def main():
 
         save_state(state)
         duration = (datetime.now() - script_start).total_seconds()
-        log("INFO", f"Queued {total_turns_queued} turns from {len(modified_transcripts)} sessions in {duration:.1f}s")
+        log(
+            "INFO",
+            f"Queued {total_turns_queued} turns from {len(modified_transcripts)} sessions in {duration:.1f}s",
+        )
         sys.exit(0)
 
     # Langfuse is available - initialize client
@@ -774,12 +843,15 @@ def main():
         total_turns = 0
         for session_id, transcript_file, project_name in modified_transcripts:
             try:
-                turns = process_transcript(langfuse, session_id, transcript_file, state, project_name)
+                turns = process_transcript(
+                    langfuse, session_id, transcript_file, state, project_name
+                )
                 total_turns += turns
                 debug(f"Processed {turns} turns from session {session_id}")
             except Exception as e:
                 log("ERROR", f"Failed to process session {session_id}: {e}")
                 import traceback
+
                 debug(traceback.format_exc())
                 continue
 
@@ -788,7 +860,10 @@ def main():
 
         # Log execution time
         duration = (datetime.now() - script_start).total_seconds()
-        log("INFO", f"Processed {total_turns} turns from {len(modified_transcripts)} sessions (drained {drained} from queue) in {duration:.1f}s")
+        log(
+            "INFO",
+            f"Processed {total_turns} turns from {len(modified_transcripts)} sessions (drained {drained} from queue) in {duration:.1f}s",
+        )
 
         if duration > 180:
             log("WARN", f"Hook took {duration:.1f}s (>3min), consider optimizing")
@@ -796,6 +871,7 @@ def main():
     except Exception as e:
         log("ERROR", f"Failed to process transcripts: {e}")
         import traceback
+
         debug(traceback.format_exc())
     finally:
         langfuse.shutdown()
