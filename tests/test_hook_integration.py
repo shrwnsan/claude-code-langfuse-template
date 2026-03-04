@@ -1,5 +1,14 @@
 #!/usr/bin/env python3
-"""Integration test for Langfuse hook - tests trace creation against running instance."""
+"""Integration test for Langfuse hook - tests trace creation against running instance.
+
+⚠️  TEST-ONLY FILE
+This file contains hardcoded placeholder keys for LOCAL TESTING ONLY.
+These are NOT real credentials and should NEVER be used in production.
+Always set environment variables in production:
+  export LANGFUSE_PUBLIC_KEY=pk-lf-...
+  export LANGFUSE_SECRET_KEY=sk-lf-...
+  export LANGFUSE_HOST=https://your-langfuse-instance.com
+"""
 
 import json
 import os
@@ -8,6 +17,7 @@ import time
 from datetime import datetime
 
 # Get test config from environment or use defaults
+# ⚠️  The default public key is a PLACEHOLDER for local docker-compose testing only
 LANGFUSE_HOST = os.environ.get("LANGFUSE_HOST", "http://localhost:3150")
 LANGFUSE_PUBLIC_KEY = os.environ.get("LANGFUSE_PUBLIC_KEY", "pk-lf-local-claude-code")
 LANGFUSE_SECRET_KEY = os.environ.get("LANGFUSE_SECRET_KEY")

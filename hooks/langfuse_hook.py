@@ -7,6 +7,22 @@ Opt-in: Only runs when TRACE_TO_LANGFUSE=true is set in project settings.
 
 Resilience: If Langfuse is unavailable, traces are queued locally and
 automatically drained on the next successful connection.
+
+⚠️  DATA SENSITIVITY WARNING ⚠️
+This hook captures and sends:
+- Full tool inputs and outputs to the Langfuse service
+- User prompts and assistant responses
+- Potentially sensitive data: PII, API keys, credentials, source code with secrets
+
+Risk: If traces contain sensitive data, it will be sent to Langfuse.
+- For Langfuse Cloud: Data is sent to external servers
+- For self-hosted Langfuse: Data stays on your infrastructure
+
+Recommendations:
+1. Review trace content before enabling in production
+2. Use self-hosted Langfuse for sensitive environments
+3. Consider setting LANGFUSE_PUBLIC_ONLY=true to exclude sensitive fields
+4. Regularly audit traces for accidentally captured secrets
 """
 
 import json
@@ -44,6 +60,44 @@ def debug(message: str) -> None:
     """Log a debug message (only if DEBUG is enabled)."""
     if DEBUG:
         log("DEBUG", message)
+
+
+def redact_sensitive_fields(data: Any, blocklist: list[str] | None = None) -> Any:
+    """Redact sensitive field values to prevent accidental PII leakage.
+    
+    Args:
+        data: Dictionary, list, or primitive value to redact
+        blocklist: List of field names to redact (case-insensitive)
+                  Defaults to: password, secret, key, token, api_key, credential
+    
+    Returns:
+        Data with sensitive fields replaced by "[REDACTED]"
+    
+    Example:
+        >>> redact_sensitive_fields({"api_key": "sk-123", "name": "John"})
+        {"api_key": "[REDACTED]", "name": "John"}
+    """
+    if blocklist is None:
+        blocklist = ["password", "secret", "key", "token", "api_key", "credential", "auth"]
+    
+    # Normalize blocklist to lowercase for comparison
+    blocklist_lower = [item.lower() for item in blocklist]
+    
+    if isinstance(data, dict):
+        redacted = {}
+        for key, value in data.items():
+            # Check if this field should be redacted
+            if key.lower() in blocklist_lower:
+                redacted[key] = "[REDACTED]"
+            else:
+                # Recursively redact nested structures
+                redacted[key] = redact_sensitive_fields(value, blocklist)
+        return redacted
+    elif isinstance(data, list):
+        return [redact_sensitive_fields(item, blocklist) for item in data]
+    else:
+        # Return primitives unchanged
+        return data
 
 
 def check_langfuse_health(host: str) -> bool:
@@ -93,19 +147,29 @@ def queue_trace(trace_data: dict) -> None:
 
 
 def load_queued_traces() -> list[dict]:
-    """Load all pending traces from the queue file."""
+    """Load all pending traces from the queue file.
+    
+    Handles corrupted lines gracefully: skips malformed JSON and continues.
+    This prevents one bad trace from blocking the entire queue.
+    """
     if not QUEUE_FILE.exists():
         return []
 
     traces = []
     try:
         with open(QUEUE_FILE, "r") as f:
-            for line in f:
+            for line_no, line in enumerate(f, 1):
                 line = line.strip()
-                if line:
+                if not line:
+                    continue
+                try:
                     traces.append(json.loads(line))
-    except (json.JSONDecodeError, IOError) as e:
-        log("ERROR", f"Failed to load queue: {e}")
+                except json.JSONDecodeError as e:
+                    # Skip corrupted lines, log warning, but continue processing
+                    log("WARNING", f"Skipping malformed JSON in queue (line {line_no}): {e}")
+                    continue
+    except IOError as e:
+        log("ERROR", f"Failed to read queue file: {e}")
         return []
 
     return traces
@@ -119,7 +183,14 @@ def clear_queue() -> None:
 
 
 def drain_queue(langfuse: Langfuse) -> int:
-    """Drain all queued traces to Langfuse. Returns count of drained traces."""
+    """Drain all queued traces to Langfuse. Returns count of drained traces.
+    
+    Distinguishes between recoverable and permanent failures:
+    - Transient (ConnectionError, TimeoutError): leaves traces in queue for retry
+    - Permanent (corrupt data, bad trace): skips and continues
+    
+    This prevents network hiccups from blocking the queue indefinitely.
+    """
     traces = load_queued_traces()
     if not traces:
         return 0
@@ -127,7 +198,9 @@ def drain_queue(langfuse: Langfuse) -> int:
     log("INFO", f"Draining {len(traces)} queued traces to Langfuse")
 
     drained = 0
-    for trace_data in traces:
+    failed_permanent = 0
+    
+    for idx, trace_data in enumerate(traces):
         try:
             create_trace(
                 langfuse=langfuse,
@@ -139,17 +212,31 @@ def drain_queue(langfuse: Langfuse) -> int:
                 project_name=trace_data.get("project_name", ""),
             )
             drained += 1
-        except Exception as e:
-            log("ERROR", f"Failed to drain trace: {e}")
-            # If we fail mid-drain, rewrite remaining traces and exit
+        except (ConnectionError, TimeoutError) as e:
+            # Transient error: network issue, likely temporary
+            # Leave remaining traces in queue and exit
+            log("WARNING", f"Transient error draining trace (will retry): {e}")
             remaining = traces[drained:]
             clear_queue()
             for remaining_trace in remaining:
                 queue_trace(remaining_trace)
             return drained
+        except (KeyError, ValueError, TypeError) as e:
+            # Permanent error: trace data is corrupted, skip and continue
+            log("ERROR", f"Skipping corrupted trace (idx {idx}): {e}")
+            failed_permanent += 1
+            continue
+        except Exception as e:
+            # Catch-all for other errors: log and skip
+            log("ERROR", f"Unexpected error draining trace (idx {idx}): {e}")
+            failed_permanent += 1
+            continue
 
     clear_queue()
-    log("INFO", f"Successfully drained {drained} traces")
+    if failed_permanent > 0:
+        log("WARNING", f"Drained {drained} traces, skipped {failed_permanent} corrupted traces")
+    else:
+        log("INFO", f"Successfully drained {drained} traces")
     return drained
 
 

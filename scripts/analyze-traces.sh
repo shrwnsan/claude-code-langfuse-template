@@ -74,6 +74,36 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
+# --- Input Validation ---
+
+# Validate OUTPUT_FORMAT
+if [[ ! "$OUTPUT_FORMAT" =~ ^(pretty|json)$ ]]; then
+    echo -e "${RED}Error: OUTPUT_FORMAT must be 'pretty' or 'json', got: $OUTPUT_FORMAT${NC}" >&2
+    exit 1
+fi
+
+# Validate TAG_FILTER (if provided): alphanumeric, dash, underscore only
+if [[ -n "$TAG_FILTER" ]]; then
+    if [[ ! "$TAG_FILTER" =~ ^[a-zA-Z0-9_-]+$ ]]; then
+        echo -e "${RED}Error: TAG_FILTER must contain only alphanumeric characters, dashes, and underscores${NC}" >&2
+        echo -e "${RED}Got: $TAG_FILTER${NC}" >&2
+        exit 1
+    fi
+fi
+
+# Validate CONTAINER_NAME (no path traversal, special chars)
+if [[ ! "$CONTAINER_NAME" =~ ^[a-zA-Z0-9._-]+$ ]]; then
+    echo -e "${RED}Error: CONTAINER_NAME contains invalid characters: $CONTAINER_NAME${NC}" >&2
+    echo -e "${RED}Must contain only alphanumeric characters, dots, dashes, and underscores${NC}" >&2
+    exit 1
+fi
+
+# Validate CH_PORT is numeric
+if [[ ! "$CH_PORT" =~ ^[0-9]+$ ]] || [[ "$CH_PORT" -lt 1 ]] || [[ "$CH_PORT" -gt 65535 ]]; then
+    echo -e "${RED}Error: CH_PORT must be a valid port number (1-65535), got: $CH_PORT${NC}" >&2
+    exit 1
+fi
+
 # --- Helpers ---
 
 print_header() {
