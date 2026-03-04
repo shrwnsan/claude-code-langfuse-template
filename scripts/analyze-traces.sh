@@ -107,27 +107,33 @@ check_fail() {
 query_ch() {
     local sql="$1"
     local format="${2:-Pretty}"
-    curl -sf "http://localhost:${CH_PORT}/?user=${CH_USER}&password=${CH_PASSWORD}" \
+    curl -sf "http://localhost:${CH_PORT}/" \
+        -u "${CH_USER}:${CH_PASSWORD}" \
         --data-binary "$sql FORMAT $format" 2>/dev/null
 }
 
 query_ch_raw() {
     local sql="$1"
-    curl -sf "http://localhost:${CH_PORT}/?user=${CH_USER}&password=${CH_PASSWORD}" \
+    curl -sf "http://localhost:${CH_PORT}/" \
+        -u "${CH_USER}:${CH_PASSWORD}" \
         --data-binary "$sql" 2>/dev/null
 }
 
-# Build tag filter clause for SQL
+# Build tag filter clause for SQL (safely escape single quotes)
 tag_where() {
     if [[ -n "$TAG_FILTER" ]]; then
-        echo "AND has(tags, '${TAG_FILTER}')"
+        # Escape single quotes by doubling them (SQL standard for ClickHouse)
+        local escaped_tag="${TAG_FILTER//\'/\'\'}"
+        echo "AND has(tags, '${escaped_tag}')"
     fi
 }
 
-# For observations, filter via trace join
+# For observations, filter via trace join (safely escape single quotes)
 tag_obs_where() {
     if [[ -n "$TAG_FILTER" ]]; then
-        echo "AND trace_id IN (SELECT id FROM traces WHERE project_id = 'claude-code' AND is_deleted = 0 AND has(tags, '${TAG_FILTER}'))"
+        # Escape single quotes by doubling them (SQL standard for ClickHouse)
+        local escaped_tag="${TAG_FILTER//\'/\'\'}"
+        echo "AND trace_id IN (SELECT id FROM traces WHERE project_id = 'claude-code' AND is_deleted = 0 AND has(tags, '${escaped_tag}'))"
     fi
 }
 
