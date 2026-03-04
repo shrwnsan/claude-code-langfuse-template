@@ -104,11 +104,11 @@ fi
 PYTHON=""
 for cmd in python3.13 python3.12 python3.11 python3; do
     if command -v "$cmd" &> /dev/null; then
-        VERSION=$($cmd -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")' 2>/dev/null || echo "0.0")
+        VERSION=$("$cmd" -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")' 2>/dev/null || echo "0.0")
         MAJOR=$(echo "$VERSION" | cut -d. -f1)
         MINOR=$(echo "$VERSION" | cut -d. -f2)
         if [ "$MAJOR" -eq 3 ] && [ "$MINOR" -ge 11 ]; then
-            PYTHON=$cmd
+            PYTHON="$cmd"
             check_pass "Python $VERSION available ($cmd)"
             break
         fi
