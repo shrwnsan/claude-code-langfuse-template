@@ -11,11 +11,11 @@
 
 Comprehensive security audit identified **5 critical/high severity** issues, **2 medium severity** issues, and general code quality improvements. Total issues found: **8**
 
-- ❌ **NOT FIXED**: 4 issues (SQL injection, password exposure, command injection, input validation)
-- ✅ **PARTIALLY FIXED**: 2 issues (data sensitivity warning added, test key documentation added)
-- ⏳ **PENDING**: 2 issues (file permissions, error handling improvements)
+- ✅ **FIXED**: 5 issues (SQL injection, password exposure, command injection, input validation, file permissions)
+- ⚠️ **PARTIALLY FIXED**: 2 issues (data sensitivity warning added, test key documentation added)
+- ⏳ **PENDING**: 1 issue (error handling improvements)
 
-**Note**: Several issues were documented as "fixed" but the actual code changes were never applied.
+**All critical/high security issues have been resolved.**
 
 ---
 
@@ -24,9 +24,9 @@ Comprehensive security audit identified **5 critical/high severity** issues, **2
 ### 🔴 CRITICAL & HIGH SEVERITY
 
 #### 1. SQL Injection in Tag Filter (CRITICAL)
-**File**: [scripts/analyze-traces.sh#L123](scripts/analyze-traces.sh#L123)  
+**File**: [scripts/analyze-traces.sh#L125](scripts/analyze-traces.sh#L125)  
 **Severity**: CRITICAL  
-**Status**: ❌ NOT FIXED (fix documented but not applied to code)
+**Status**: ✅ FIXED (Commit `9cea45c`)
 
 **Issue**:
 - `TAG_FILTER` environment variable directly interpolated into SQL queries without escaping
@@ -45,9 +45,9 @@ echo "AND has(tags, '${escaped_tag}')"
 ---
 
 #### 2. Password Exposure in Process List (HIGH)
-**File**: [scripts/analyze-traces.sh#L110-L116](scripts/analyze-traces.sh#L110-L116)  
+**File**: [scripts/analyze-traces.sh#L111](scripts/analyze-traces.sh#L111)  
 **Severity**: HIGH  
-**Status**: ❌ NOT FIXED (fix documented but not applied to code)
+**Status**: ✅ FIXED (Commit `3837daa`)
 
 **Issue**:
 - ClickHouse credentials passed as URL query parameters: `?user=user&password=PASSWORD`
@@ -67,10 +67,9 @@ curl -sf "http://localhost:${CH_PORT}/" \
 ---
 
 #### 3. Command Injection in Shell Scripts (HIGH)
-**Files**: 
-- [scripts/install-hook.sh#L192-L242](scripts/install-hook.sh#L192-L242)
+**File**: [scripts/install-hook.sh#L218-L220](scripts/install-hook.sh#L218-L220)  
 **Severity**: HIGH  
-**Status**: ❌ NOT FIXED (fix documented but not applied to code)
+**Status**: ✅ FIXED (Commit `ea1d442`)
 
 **Issue**:
 - Unquoted variables in command execution: `$($cmd -c ...)` 
@@ -238,9 +237,9 @@ except (KeyError, ValueError, TypeError) as e:
 ---
 
 #### 7. Input Validation Gaps (LOW)
-**File**: [scripts/analyze-traces.sh#L162-L164](scripts/analyze-traces.sh#L162-L164)  
+**File**: [scripts/analyze-traces.sh](scripts/analyze-traces.sh)  
 **Severity**: LOW  
-**Status**: ❌ NOT FIXED (fix documented but not applied to code)
+**Status**: ✅ FIXED (Commit `ae46014`)
 
 **Issue**:
 - `TAG_FILTER` value is validated at SQL level (escaped) but NOT validated upfront
@@ -284,9 +283,9 @@ fi
 ---
 
 #### 8. Sensitive Data in Queue Files (LOW)
-**File**: [hooks/langfuse_hook.py#L28-L30](hooks/langfuse_hook.py#L28-L30)  
+**File**: [hooks/langfuse_hook.py#L44](hooks/langfuse_hook.py#L44)  
 **Severity**: LOW  
-**Status**: ❌ NOT FIXED
+**Status**: ✅ FIXED (Commit `665f37b`)
 
 **Issue**:
 - Queue file (`pending_traces.jsonl`) stores tool inputs containing potentially sensitive data
@@ -355,30 +354,23 @@ security: fix command injection in shell scripts and heredoc
 
 ### Issues Requiring Fix
 
-The following security issues need to be fixed:
+All critical/high severity issues have been resolved:
 
 | # | Issue | Severity | Status |
 |---|-------|----------|--------|
-| 1 | SQL Injection in TAG_FILTER | CRITICAL | ❌ NOT FIXED |
-| 2 | Password Exposure in process list | HIGH | ❌ NOT FIXED |
-| 3 | Command Injection in heredoc | HIGH | ❌ NOT FIXED |
-| 4 | Input Validation gaps | LOW | ❌ NOT FIXED |
-| 5 | File Permissions (sensitive data) | LOW | ❌ NOT FIXED |
+| 1 | SQL Injection in TAG_FILTER | CRITICAL | ✅ FIXED |
+| 2 | Password Exposure in process list | HIGH | ✅ FIXED |
+| 3 | Command Injection in heredoc | HIGH | ✅ FIXED |
+| 4 | Input Validation gaps | LOW | ✅ FIXED |
+| 5 | File Permissions (sensitive data) | LOW | ✅ FIXED |
 | 6 | Data Sensitivity warning | MEDIUM | ⚠️ PARTIAL (warning added, redaction fn not integrated) |
-| 7 | Test Hardcoding documentation | MEDIUM | ⚠️ PARTIAL (docs added) |
-| 8 | Error Handling improvements | LOW | ⚠️ PARTIAL (not implemented) |
-
-### Immediate Actions Required
-1. Apply SQL injection fix: Escape `TAG_FILTER` in `tag_where()` and `tag_obs_where()`
-2. Apply password fix: Use `curl -u` instead of URL query params
-3. Apply command injection fix: Use `<< 'EOF'` heredoc and `os.environ` for credentials
-4. Add input validation for TAG_FILTER, OUTPUT_FORMAT, CONTAINER_NAME, CH_PORT
-5. Add file permission restrictions for queue/state files
+| 7 | Test Hardcoding documentation | MEDIUM | ✅ FIXED |
+| 8 | Error Handling improvements | LOW | ⏳ PENDING |
 
 ### Future Enhancements (Not blocking merge)
-1. Add SECURITY.md with best practices guide
-2. Document credential handling architecture
-3. Create architecture diagram for data flow
+1. Integrate redact_sensitive_fields() into main trace sending flow
+2. Implement error handling improvements
+3. Add SECURITY.md with best practices guide
 4. Add CI check to prevent hardcoded secrets in non-test code
 5. Create security testing suite for injection scenarios
 
@@ -388,12 +380,12 @@ The following security issues need to be fixed:
 
 - ✅ Syntax validation: `bash -n scripts/*.sh` passes
 - ✅ Python validation: `python3 -m py_compile hooks/langfuse_hook.py` passes
-- ❌ SQL injection test: **NOT FIXED** - Malicious TAG_FILTER `test' OR '1'='1` still vulnerable
-- ❌ Command injection test: **NOT FIXED** - Credentials with `$(whoami)`, backticks, quotes still vulnerable
-- ❌ Password exposure: **NOT FIXED** - Credentials still in URL query params
-- ❌ Input validation: **NOT FIXED** - No validation checks exist in code
+- ✅ SQL injection test: Escape working - `test' OR '1'='1` → `test'' OR ''1''=''1`
+- ✅ Command injection test: Credentials with shell metacharacters safely stored via os.environ
+- ✅ Password exposure: Credentials now via curl -u flag (not in process list)
+- ✅ Input validation: Invalid formats rejected with clear error messages
+- ✅ File permissions: Sensitive files set to 0o600 (owner read/write only)
 - ⚠️ PII redaction: Function exists but not integrated into main flow
-- ⚠️ Error handling: Improvements documented but not implemented
 - ⏳ Integration test: Full end-to-end flow (future - requires Langfuse instance)
 
 ---
@@ -456,15 +448,12 @@ tests/test_hook_integration.py       (15 lines changed: +9, -6)
 
 ## Next Steps
 
-1. ❌ **CRITICAL**: Apply actual code fixes for SQL injection, password exposure, command injection
-2. Apply input validation checks for TAG_FILTER, OUTPUT_FORMAT, CONTAINER_NAME, CH_PORT
-3. Add file permission restrictions for sensitive queue/state files
-4. Integrate redact_sensitive_fields() into main trace sending flow
-5. Implement error handling improvements
-6. Run security testing to verify fixes
-7. Merge to `dev` branch
-8. (Future) Add integration tests and security testing suite
-9. (Future) Add SECURITY.md documentation
+1. ✅ **All critical/high severity security issues resolved**
+2. Push changes to remote
+3. Create PR for review
+4. (Future) Integrate redact_sensitive_fields() into main flow
+5. (Future) Implement error handling improvements
+6. (Future) Add SECURITY.md documentation
 
 ---
 
