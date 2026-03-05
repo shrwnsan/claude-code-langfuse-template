@@ -107,13 +107,15 @@ check_fail() {
 query_ch() {
     local sql="$1"
     local format="${2:-Pretty}"
-    curl -sf "http://localhost:${CH_PORT}/?user=${CH_USER}&password=${CH_PASSWORD}" \
+    curl -sf "http://localhost:${CH_PORT}/" \
+        -u "${CH_USER}:${CH_PASSWORD}" \
         --data-binary "$sql FORMAT $format" 2>/dev/null
 }
 
 query_ch_raw() {
     local sql="$1"
-    curl -sf "http://localhost:${CH_PORT}/?user=${CH_USER}&password=${CH_PASSWORD}" \
+    curl -sf "http://localhost:${CH_PORT}/" \
+        -u "${CH_USER}:${CH_PASSWORD}" \
         --data-binary "$sql" 2>/dev/null
 }
 
