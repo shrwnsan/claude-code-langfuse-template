@@ -120,14 +120,16 @@ query_ch_raw() {
 # Build tag filter clause for SQL
 tag_where() {
     if [[ -n "$TAG_FILTER" ]]; then
-        echo "AND has(tags, '${TAG_FILTER}')"
+        local escaped_tag="${TAG_FILTER//\'/\'\'}"
+        echo "AND has(tags, '${escaped_tag}')"
     fi
 }
 
 # For observations, filter via trace join
 tag_obs_where() {
     if [[ -n "$TAG_FILTER" ]]; then
-        echo "AND trace_id IN (SELECT id FROM traces WHERE project_id = 'claude-code' AND is_deleted = 0 AND has(tags, '${TAG_FILTER}'))"
+        local escaped_tag="${TAG_FILTER//\'/\'\'}"
+        echo "AND trace_id IN (SELECT id FROM traces WHERE project_id = 'claude-code' AND is_deleted = 0 AND has(tags, '${escaped_tag}'))"
     fi
 }
 
