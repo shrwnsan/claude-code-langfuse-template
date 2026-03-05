@@ -122,11 +122,11 @@ fi
 PYTHON=""
 for cmd in python3.13 python3.12 python3.11 python3; do
     if command -v "$cmd" &> /dev/null; then
-        VERSION=$($cmd -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')
-        MAJOR=$(echo $VERSION | cut -d. -f1)
-        MINOR=$(echo $VERSION | cut -d. -f2)
+        VERSION=$("$cmd" -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')
+        MAJOR=$(echo "$VERSION" | cut -d. -f1)
+        MINOR=$(echo "$VERSION" | cut -d. -f2)
         if [ "$MAJOR" -eq 3 ] && [ "$MINOR" -ge 11 ]; then
-            PYTHON=$cmd
+            PYTHON="$cmd"
             echo -e "${GREEN}✓ Found Python $VERSION at $cmd${NC}"
             break
         fi
@@ -198,13 +198,18 @@ SETTINGS_CONTENT=$(cat "$SETTINGS_FILE")
 
 # Use Python to update JSON (more reliable than jq)
 # Use os.environ to read credentials to prevent shell injection
-"$PYTHON" << EOF
+"$PYTHON" << 'PYTHON_EOF'
 import json
 import os
 import sys
 
+# Read settings file path from environment
+settings_file = os.environ.get("SETTINGS_FILE")
+python_bin = os.environ.get("PYTHON")
+hook_dest = os.environ.get("HOOK_DEST")
+
 # Read current settings
-with open("$SETTINGS_FILE", "r") as f:
+with open(settings_file, "r") as f:
     settings = json.load(f)
 
 # Ensure env and hooks sections exist
@@ -213,7 +218,7 @@ if "env" not in settings:
 if "hooks" not in settings:
     settings["hooks"] = {}
 
-# Add environment variables
+# Add environment variables (read from environment, not shell interpolation)
 settings["env"]["TRACE_TO_LANGFUSE"] = "true"
 settings["env"]["LANGFUSE_PUBLIC_KEY"] = os.environ.get("LANGFUSE_PUBLIC_KEY", "")
 settings["env"]["LANGFUSE_SECRET_KEY"] = os.environ.get("LANGFUSE_SECRET_KEY", "")
@@ -224,12 +229,12 @@ if "Stop" not in settings["hooks"]:
     settings["hooks"]["Stop"] = []
 
 # Check if hook already registered
-hook_command = "$PYTHON $HOOK_DEST"
+hook_command = f"{python_bin} {hook_dest}"
 hook_exists = False
 for hook_group in settings["hooks"]["Stop"]:
     if "hooks" in hook_group:
         for hook in hook_group["hooks"]:
-            if hook.get("type") == "command" and "$HOOK_DEST" in hook.get("command", ""):
+            if hook.get("type") == "command" and hook_dest in hook.get("command", ""):
                 hook_exists = True
                 break
 
@@ -244,12 +249,12 @@ if not hook_exists:
     })
 
 # Write updated settings
-with open("$SETTINGS_FILE", "w") as f:
+with open(settings_file, "w") as f:
     json.dump(settings, f, indent=2)
     f.write("\n")
 
 print("Updated settings.json")
-EOF
+PYTHON_EOF
 
 if [ $? -eq 0 ]; then
     echo -e "${GREEN}✓ Updated Claude Code settings: $SETTINGS_FILE${NC}"
