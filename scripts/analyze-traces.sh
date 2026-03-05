@@ -137,6 +137,30 @@ tag_obs_where() {
 
 # --- Preflight Checks ---
 
+# Validate OUTPUT_FORMAT must be 'pretty' or 'json'
+if [[ ! "$OUTPUT_FORMAT" =~ ^(pretty|json)$ ]]; then
+    echo "Error: OUTPUT_FORMAT must be 'pretty' or 'json'" >&2
+    exit 1
+fi
+
+# Validate TAG_FILTER (alphanumeric + dash/underscore only)
+if [[ -n "$TAG_FILTER" && ! "$TAG_FILTER" =~ ^[a-zA-Z0-9_-]+$ ]]; then
+    echo "Error: TAG_FILTER must contain only alphanumeric, dash, underscore" >&2
+    exit 1
+fi
+
+# Validate CONTAINER_NAME (prevent path traversal)
+if [[ ! "$CONTAINER_NAME" =~ ^[a-zA-Z0-9._-]+$ ]]; then
+    echo "Error: CONTAINER_NAME contains invalid characters" >&2
+    exit 1
+fi
+
+# Validate CH_PORT is numeric and in valid range
+if [[ ! "$CH_PORT" =~ ^[0-9]+$ ]] || [[ "$CH_PORT" -lt 1 ]] || [[ "$CH_PORT" -gt 65535 ]]; then
+    echo "Error: CH_PORT must be 1-65535" >&2
+    exit 1
+fi
+
 if [[ "$OUTPUT_FORMAT" == "pretty" ]]; then
     echo ""
     echo -e "${BOLD}Langfuse Trace Analyzer${NC} ${DIM}(ClickHouse direct)${NC}"
